@@ -38,8 +38,7 @@
     border-radius:4px; transition:width 0.7s cubic-bezier(.34,1.4,.64,1);
     box-shadow:0 4px 6px rgba(0,0,0,0.3);
   }
-  #tree{ position:absolute; bottom:22%; width:100px; height:170px; transform:translateX(-50%); transform-origin:bottom center; transition:transform 0.5s ease, opacity 0.5s ease; }
-  #tree svg{ width:100%; height:100%; overflow:visible; }
+  #tree{ position:absolute; bottom:22%; width:120px; height:170px; line-height:170px; font-size:130px; text-align:center; transform:translateX(-50%); transform-origin:bottom center; transition:transform 0.5s ease, opacity 0.5s ease; }
   #tree.broken{ transform:translateX(-50%) rotate(85deg) scale(0.9); opacity:0; }
 
   #lever{ position:absolute; bottom:22%; width:50px; height:74px; transform:translateX(-50%); }
@@ -69,9 +68,15 @@
     color:rgba(74,74,74,0.65); pointer-events:none; white-space:nowrap; transform:translateX(-50%);
   }
   .charPos{ position:absolute; bottom:22%; left:0; transform:translateX(-50%); will-change:transform; }
+  .charPos .label{
+    position:absolute; top:-22px; left:50%; transform:translateX(-50%); white-space:nowrap;
+    font-size:0.8em; font-weight:bold; color:#4A4A4A; text-shadow:0 1px 2px rgba(255,255,255,0.8);
+  }
   .charFlip{ display:block; }
   .creature{ display:block; transform-origin:center bottom; }
   .creature.launched{ filter:drop-shadow(0 0 16px gold); }
+  .creature.celebrate{ animation:celebrateHop 0.6s ease-in-out 2; }
+  @keyframes celebrateHop{ 0%,100%{ transform:translateY(0) scale(1); } 30%{ transform:translateY(-26px) scale(1.08); } 55%{ transform:translateY(0) scale(0.95); } 75%{ transform:translateY(-12px) scale(1.03); } }
   .spriteImg{ display:block; image-rendering:auto; user-select:none; pointer-events:none; }
 
   #hint{
@@ -106,14 +111,7 @@
     <div id="groundWorld"></div>
     <div id="pit"></div>
     <div id="bridge"></div>
-    <div id="tree">
-      <svg viewBox="0 0 100 130">
-        <rect x="42" y="72" width="16" height="52" rx="4" fill="#8a5a34" stroke="#5b3a20" stroke-width="4"/>
-        <ellipse cx="50" cy="48" rx="46" ry="40" fill="#6FA036" stroke="#4f7a26" stroke-width="4"/>
-        <ellipse cx="26" cy="34" rx="24" ry="20" fill="#7CB342" stroke="#4f7a26" stroke-width="4"/>
-        <ellipse cx="74" cy="34" rx="24" ry="20" fill="#7CB342" stroke="#4f7a26" stroke-width="4"/>
-      </svg>
-    </div>
+    <div id="tree">🪾</div>
     <div id="lever"><div class="base"></div><div class="handle"></div></div>
     <div id="ledge"></div>
     <div id="cage">
@@ -154,7 +152,10 @@ let hintShown=true;
 function hideHint(){ if(hintShown){ hint.style.opacity=0; hintShown=false; } }
 
 const audioCtx = new (window.AudioContext||window.webkitAudioContext)();
-function unlockAudio(){ if(audioCtx.state==='suspended') audioCtx.resume(); }
+function unlockAudio(){
+  if(audioCtx.state==='suspended') audioCtx.resume();
+  if(cameraMode!=='play') tryPlayIntroCry();
+}
 
 function jumpSound(){
   const t0=audioCtx.currentTime;
@@ -227,6 +228,25 @@ function whine(duration=0.6){
   g.gain.setValueAtTime(0.001,now); g.gain.linearRampToValueAtTime(0.12,now+0.05);
   g.gain.linearRampToValueAtTime(0.001,now+duration);
   o.connect(g); g.connect(audioCtx.destination); o.start(now); o.stop(now+duration+0.05);
+}
+function animalCry(){
+  const t0=audioCtx.currentTime;
+  const o=audioCtx.createOscillator(), g=audioCtx.createGain();
+  o.type='sine';
+  o.frequency.setValueAtTime(520,t0);
+  o.frequency.exponentialRampToValueAtTime(280,t0+0.3);
+  o.frequency.exponentialRampToValueAtTime(360,t0+0.5);
+  o.frequency.exponentialRampToValueAtTime(230,t0+0.85);
+  g.gain.setValueAtTime(0.001,t0); g.gain.linearRampToValueAtTime(0.2,t0+0.05);
+  g.gain.linearRampToValueAtTime(0.1,t0+0.4);
+  g.gain.exponentialRampToValueAtTime(0.001,t0+0.9);
+  o.connect(g); g.connect(audioCtx.destination); o.start(t0); o.stop(t0+0.92);
+}
+let introCryPlayed=false;
+function tryPlayIntroCry(){
+  if(introCryPlayed) return;
+  introCryPlayed=true;
+  animalCry();
 }
 function heroicFanfare(){
   const notes=[523.25,659.25,783.99,1046.5], t0=audioCtx.currentTime;
@@ -361,17 +381,17 @@ function updateSpriteAnimation(ch, t, dt, moveDir){
 }
 
 // ---------- world layout: fixed absolute pixel coordinates (a real journey, not a single screen) ----------
-const GRAVITY=2400, JUMP_VELOCITY=820, BOOST_VELOCITY=1280, MAX_VELY=1600, BASE_SPEED=260;
+const GRAVITY=2400, JUMP_VELOCITY=820, BOOST_VELOCITY=1280, MAX_VELY=1600, BASE_SPEED=350;
 const LEDGE_TOP_Y=250, LEDGE_THICK=26, MASH_TARGET=8, STOMP_RADIUS=130, FALL_LIMIT=-160;
 const STEP_INTERVAL_HEAVY=360, STEP_INTERVAL_SWIFT=190;
-const WORLD_WIDTH=2500;
+const WORLD_WIDTH=2800;
 let world={
   bridgeActive:false, treeBroken:false, rescued:false,
   minX:90, maxX:WORLD_WIDTH-90,
-  treeX:420,
-  gapStart:620, gapWidth:140,
-  leverX:940,
-  ledgeStart:1650, ledgeEnd:1850,
+  treeX:520,
+  gapStart:870, gapWidth:180,
+  leverX:1230,
+  ledgeStart:1940, ledgeEnd:2140,
 };
 world.gapEnd = world.gapStart+world.gapWidth;
 world.cageX = (world.ledgeStart+world.ledgeEnd)/2;
@@ -393,6 +413,8 @@ function layoutWorld(){
   lblCombo.style.left=world.cageX+'px'; lblCombo.style.bottom='calc(22% + '+(LEDGE_TOP_Y+LEDGE_THICK+210)+'px)';
 }
 layoutWorld();
+showMessage('😿 Oh no — Rhino & Cheetah are trapped! Help set them free!', 3200);
+setTimeout(tryPlayIntroCry, 700);
 
 function isSupportedAt(x,y){
   if(y<=0.5){
@@ -488,7 +510,14 @@ function mashCage(ch){
     mashHint.classList.remove('show');
     lblCombo.style.opacity='0';
     showMessage('🎉 Rhino & Cheetah rescued! First animal abilities unlocked!', 4000);
+    celebrate(heavy); celebrate(swift);
   }
+}
+function celebrate(ch){
+  ch.dom.creature.classList.remove('celebrate'); void ch.dom.creature.offsetWidth; ch.dom.creature.classList.add('celebrate');
+  const r=ch.dom.creature.getBoundingClientRect();
+  confettiAt(r.left+r.width/2, r.top+r.height/2, ['#FFD166','#FF6F61','#6EC6FF','#8BC34A'], 12);
+  setTimeout(()=>ch.dom.creature.classList.remove('celebrate'), 1300);
 }
 function swiftAction(ch){
   if(nearCage(ch)){ mashCage(ch); return; }
@@ -553,11 +582,29 @@ function readPad(ch){
 
 // ---------- camera ----------
 let camX=0;
+let cameraMode='introToCage', introTimer=0;
 function updateCamera(){
   const VW = window.innerWidth;
   const midX = (heavy.x+swift.x)/2;
   const targetCam = Math.max(0, Math.min(WORLD_WIDTH-VW, midX-VW/2));
   camX += (targetCam-camX)*0.08;
+  worldEl.style.transform = `translateX(${-camX}px)`;
+}
+function updateCameraIntro(dt){
+  const VW = window.innerWidth;
+  introTimer += dt;
+  if(cameraMode==='introToCage'){
+    const target = Math.max(0, Math.min(WORLD_WIDTH-VW, world.cageX-VW/2));
+    camX += (target-camX)*0.05;
+    if(introTimer>1.6){ cameraMode='introHold'; introTimer=0; }
+  } else if(cameraMode==='introHold'){
+    if(introTimer>1.1){ cameraMode='introToStart'; introTimer=0; }
+  } else if(cameraMode==='introToStart'){
+    const midX=(heavy.x+swift.x)/2;
+    const target = Math.max(0, Math.min(WORLD_WIDTH-VW, midX-VW/2));
+    camX += (target-camX)*0.07;
+    if(introTimer>1.6){ cameraMode='play'; }
+  }
   worldEl.style.transform = `translateX(${-camX}px)`;
 }
 
@@ -631,7 +678,7 @@ function tick(t){
   const connected = pads.filter(p=>p).length;
   statusEl.textContent = `${connected} controller(s) connected — Heavy: ${heavy.padIndex===null?'keyboard/unclaimed':'pad '+heavy.padIndex} · Swift: ${swift.padIndex===null?'keyboard/unclaimed':'pad '+swift.padIndex}`;
   players.forEach(ch=>updateCharacter(ch, t, dt));
-  updateCamera();
+  if(cameraMode==='play'){ updateCamera(); } else { updateCameraIntro(dt); }
   updateProgress();
   requestAnimationFrame(tick);
 }
