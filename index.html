@@ -38,7 +38,7 @@
     border-radius:4px; transition:width 0.7s cubic-bezier(.34,1.4,.64,1);
     box-shadow:0 4px 6px rgba(0,0,0,0.3);
   }
-  #tree{ position:absolute; bottom:22%; width:120px; height:170px; line-height:170px; font-size:130px; text-align:center; transform:translateX(-50%); transform-origin:bottom center; transition:transform 0.5s ease, opacity 0.5s ease; }
+  #tree{ position:absolute; bottom:calc(22% - 34px); width:200px; height:280px; line-height:280px; font-size:230px; text-align:center; transform:translateX(-50%); transform-origin:bottom center; transition:transform 0.5s ease, opacity 0.5s ease; }
   #tree.broken{ transform:translateX(-50%) rotate(85deg) scale(0.9); opacity:0; }
 
   #lever{ position:absolute; bottom:22%; width:50px; height:74px; transform:translateX(-50%); }
@@ -97,7 +97,7 @@
   @keyframes dustpop{ 0%{ transform:translate(0,0) scale(0.6); opacity:0.8; } 100%{ transform:translate(var(--dx),var(--dy)) scale(1.4); opacity:0; } }
   .star{ position:absolute; font-size:22px; pointer-events:none; animation: starfloat 0.9s ease-out forwards; z-index:4; }
   @keyframes starfloat{ 0%{ transform:translate(0,0) rotate(0deg); opacity:1; } 100%{ transform:translate(var(--dx),var(--dy)) rotate(180deg); opacity:0; } }
-  .groundwave{ position:absolute; height:14px; width:170px; background:linear-gradient(90deg, rgba(120,80,40,0.65), rgba(120,80,40,0)); border-radius:7px; pointer-events:none; animation:waveOut 0.45s ease-out forwards; z-index:4; }
+  .groundwave{ position:absolute; height:18px; width:220px; background:linear-gradient(90deg, rgba(120,80,40,0.65), rgba(120,80,40,0)); border-radius:9px; pointer-events:none; animation:waveOut 0.45s ease-out forwards; z-index:4; }
   @keyframes waveOut{ 0%{ transform:scaleX(0.05); opacity:0.95; } 100%{ transform:scaleX(1); opacity:0; } }
   #status{ position:absolute; bottom:6px; left:12px; font-size:0.7em; color:rgba(0,0,0,0.35); z-index:5; }
   #progressTrack{ position:absolute; top:2%; left:50%; transform:translateX(-50%); width:60%; max-width:420px; height:8px; background:rgba(0,0,0,0.15); border-radius:5px; z-index:5; }
@@ -305,7 +305,7 @@ function groundShockwave(ch){
     const w=document.createElement('div'); w.className='groundwave';
     w.style.top=baseY+'px';
     if(dir>0){ w.style.left=baseX+'px'; w.style.transformOrigin='left center'; }
-    else { w.style.left=(baseX-170)+'px'; w.style.transformOrigin='right center'; }
+    else { w.style.left=(baseX-220)+'px'; w.style.transformOrigin='right center'; }
     stage.appendChild(w); setTimeout(()=>w.remove(),480);
   });
 }
@@ -382,8 +382,11 @@ function updateSpriteAnimation(ch, t, dt, moveDir){
 
 // ---------- world layout: fixed absolute pixel coordinates (a real journey, not a single screen) ----------
 const GRAVITY=2400, JUMP_VELOCITY=820, BOOST_VELOCITY=1280, MAX_VELY=1600, BASE_SPEED=350;
-const LEDGE_TOP_Y=250, LEDGE_THICK=26, MASH_TARGET=8, STOMP_RADIUS=130, FALL_LIMIT=-160;
+const LEDGE_TOP_Y=250, LEDGE_THICK=26, MASH_TARGET=8, STOMP_RADIUS=190, FALL_LIMIT=-160;
 const STEP_INTERVAL_HEAVY=360, STEP_INTERVAL_SWIFT=190;
+const STOMP_FRAME_MS=140; // must match updateSpriteAnimation's stomp frame duration
+const STOMP_IMPACT_DELAY_MS=STOMP_FRAME_MS*2; // impact lands on the 3rd stomp frame (magma_stomp_3), when the explosion sprite appears
+const STOMP_BOOST_GRACE_MS=350; // combo window after the explosion during which Swift jumping still catches the boost
 const WORLD_WIDTH=2800;
 let world={
   bridgeActive:false, treeBroken:false, rescued:false,
@@ -432,6 +435,17 @@ function showMessage(text,ms=2600){
 }
 
 // ---------- actions ----------
+let pendingHeavyBoost=null; // {x, until} - a short combo window after Heavy's explosion during which a grounded Swift jump still catches the boost
+function boostSwift(ch){
+  ch.velY = Math.min(ch.velY + BOOST_VELOCITY, MAX_VELY);
+  ch.boostedThisJump = true;
+  ch.jumpAnimStart = performance.now();
+  ch.dom.creature.classList.add('launched');
+  setTimeout(()=>ch.dom.creature.classList.remove('launched'),500);
+  popSound(880,0.25,0.2);
+  const r=ch.dom.creature.getBoundingClientRect();
+  starBurstAt(r.left+r.width/2, r.top+r.height/2);
+}
 function doJump(ch){
   if(ch.role!=='swift') return;
   if(ch.onGround){
@@ -440,6 +454,10 @@ function doJump(ch){
     jumpSound();
     const r=ch.dom.creature.getBoundingClientRect();
     confettiAt(r.left+r.width/2, r.top+r.height/2, ['#FFD166','#6EC6FF'], 8);
+    if(pendingHeavyBoost && performance.now()<pendingHeavyBoost.until && Math.abs(ch.x-pendingHeavyBoost.x)<STOMP_RADIUS){
+      pendingHeavyBoost=null;
+      boostSwift(ch);
+    }
   } else if(ch.jumpsUsed<ch.maxAirJumps){
     ch.velY=JUMP_VELOCITY*0.95; ch.jumpsUsed++;
     doubleJumpSound();
@@ -450,13 +468,18 @@ function doJump(ch){
 function doStomp(ch){
   if(ch.role!=='heavy') return;
   const now=performance.now();
+  if(ch.stompUntil && now<ch.stompUntil) return; // already mid-stomp
   ch.stompStart=now; ch.stompUntil=now+STOMP_TOTAL_MS;
+  setTimeout(()=>stompImpact(ch), STOMP_IMPACT_DELAY_MS);
+}
+function stompImpact(ch){
+  // fires when the explosion sprite (3rd stomp frame) appears, not on keypress
   stompBoom();
   screenShake();
   groundShockwave(ch);
   dustBurst(ch);
 
-  if(!world.treeBroken && Math.abs(ch.x-world.treeX) < 140){
+  if(!world.treeBroken && Math.abs(ch.x-world.treeX) < STOMP_RADIUS){
     world.treeBroken=true;
     treeEl.classList.add('broken');
     crumbleSound();
@@ -467,15 +490,12 @@ function doStomp(ch){
   }
 
   const swift = players.find(p=>p.role==='swift');
-  if(swift && !swift.onGround && !swift.boostedThisJump && Math.abs(swift.x-ch.x) < STOMP_RADIUS){
-    swift.velY = Math.min(swift.velY + BOOST_VELOCITY, MAX_VELY);
-    swift.boostedThisJump = true;
-    swift.jumpAnimStart = performance.now();
-    swift.dom.creature.classList.add('launched');
-    setTimeout(()=>swift.dom.creature.classList.remove('launched'),500);
-    popSound(880,0.25,0.2);
-    const r=swift.dom.creature.getBoundingClientRect();
-    starBurstAt(r.left+r.width/2, r.top+r.height/2);
+  if(swift && !swift.boostedThisJump && Math.abs(swift.x-ch.x) < STOMP_RADIUS){
+    if(!swift.onGround){
+      boostSwift(swift);
+    } else {
+      pendingHeavyBoost = { x: ch.x, until: performance.now()+STOMP_BOOST_GRACE_MS };
+    }
   }
 }
 function nearLever(ch){
